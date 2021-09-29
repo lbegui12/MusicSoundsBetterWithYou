@@ -31,8 +31,21 @@ import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 
+
+
+
+
+
 #specify the path
 path='./archive/Alain_Souchon/'
+
+
+
+N_EPOCH = 20
+
+
+
+
 
 # read all the filenames
 files=[i for i in os.listdir(path) if i.endswith(".mid")]
@@ -218,7 +231,7 @@ MODEL TRAINING
 mc=ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min', save_best_only=True,verbose=1)
 
 # Let's train the model
-history = model.fit(np.array(x_tr),np.array(y_tr),batch_size=128,epochs=20, validation_data=(np.array(x_val),np.array(y_val)),verbose=1, callbacks=[mc])
+history = model.fit(np.array(x_tr),np.array(y_tr),batch_size=128,epochs=N_EPOCH, validation_data=(np.array(x_val),np.array(y_val)),verbose=1, callbacks=[mc])
 
 # Loading the best model
 from keras.models import load_model
@@ -237,8 +250,8 @@ random_music = x_val[ind]
 predictions=[]
 for i in range(30):
 
-    random_music = random_music.reshape(1,no_of_timesteps)
-
+    random_music = np.reshape(random_music, (1, no_of_timesteps, 1))
+    
     prob  = model.predict(random_music)[0]
     y_pred= np.argmax(prob,axis=0)
     predictions.append(y_pred)
