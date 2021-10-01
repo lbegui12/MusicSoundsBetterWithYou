@@ -6,22 +6,21 @@ Created on Fri Sep 24 10:21:00 2021
 """
 
 
-#for listing down the file names
+# Os  related actions (listing down the file names, checking dir)
 import os
 
 #Array Processing
 import numpy as np
 
-#from keras import Sequential, LSTM, Dense, Activation
-from keras.layers import *
+import keras
+from keras.layers import LSTM, Dropout, Dense, Activation
 from keras.models import *
-from keras.callbacks import *
+from keras.callbacks import ModelCheckpoint
 import keras.backend as K
-
-
-from music21 import *
+from keras.models import load_model
 
 from midi import read_midi
+from midi import convert_to_midi
 
 #importing library
 from collections import Counter
@@ -37,14 +36,17 @@ from sklearn.model_selection import train_test_split
 
 
 #specify the path
-midi_path='./archive/Alain_Souchon/'
-best_model_path = "models"
+midi_path='./archive/Alain_Souchon/'        # path to the midi files
+best_model_path = "models"                  # path to the already created and trained models
+# Check the model dir exists and create it if not
 if not os.path.exists(best_model_path):
     os.makedirs(best_model_path)
-    
-best_model_path = best_model_path + "/best_model.h5"
 
-N_EPOCH = 2
+model_filename = "best_model.h5"
+best_model_path = best_model_path + "/" + model_filename 
+
+N_EPOCH = 2             # n_epoch for the model training
+create_model = False    # Boolean to determine whether we create the model or load a saved one if possible
 
 
 
@@ -172,80 +174,47 @@ y_val = to_categorical(y_val)
 """
 MODEL CREATION
 """
-from keras.layers import *
-from keras.models import *
-from keras.callbacks import *
-import keras.backend as K
-
-K.clear_session()
-
-"""
-model = Sequential()
+# Check there is a saved model
+if not create_model and os.path.isfile(best_model_path):
+    # If so we load the model
+    model = load_model(best_model_path)
+else:
+    # We define and train it
     
-#embedding layer
-model.add(Embedding(len(unique_x), 100, input_length=32,trainable=True)) 
-
-model.add(Conv1D(64,3, padding='causal',activation='relu'))
-model.add(Dropout(0.2))
-model.add(MaxPool1D(2))
+    K.clear_session()
     
-model.add(Conv1D(128,3,activation='relu',dilation_rate=2,padding='causal'))
-model.add(Dropout(0.2))
-model.add(MaxPool1D(2))
-
-model.add(Conv1D(256,3,activation='relu',dilation_rate=4,padding='causal'))
-model.add(Dropout(0.2))
-model.add(MaxPool1D(2))
-          
-#model.add(Conv1D(256,5,activation='relu'))    
-model.add(GlobalMaxPool1D())
+    model = keras.Sequential()
+    model.add(LSTM(
+        256,
+        input_shape=(x_tr.shape[1], x_tr.shape[2]),
+        return_sequences=True
+    ))
+    model.add(Dropout(0.3))
+    model.add(LSTM(512, return_sequences=True))
+    model.add(Dropout(0.3))
+    model.add(LSTM(256))
+    model.add(Dense(256))
+    model.add(Dropout(0.3))
+    model.add(Dense(len(unique_y)))
     
-model.add(Dense(256, activation='relu'))
-model.add(Dense(len(unique_y), activation='softmax'))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    model.summary()
     
-model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
-
-model.summary()
-"""
-
-model = Sequential()
-model.add(LSTM(
-    256,
-    input_shape=(x_tr.shape[1], x_tr.shape[2]),
-    return_sequences=True
-))
-model.add(Dropout(0.3))
-model.add(LSTM(512, return_sequences=True))
-model.add(Dropout(0.3))
-#model.summary()
-model.add(LSTM(256))
-model.add(Dense(256))
-model.add(Dropout(0.3))
-model.add(Dense(len(unique_y)))
-#model.summary()
-model.add(Activation('softmax'))
-model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
-
-
-"""
-MODEL TRAINING
-"""
-# Define Callback to save the best model during training
-mc=ModelCheckpoint(best_model_path, monitor='val_loss', mode='min', save_best_only=True,verbose=1)
-
-# Let's train the model
-history = model.fit(np.array(x_tr),np.array(y_tr),batch_size=128,epochs=N_EPOCH, validation_data=(np.array(x_val),np.array(y_val)),verbose=1, callbacks=[mc])
-
-# Loading the best model
-from keras.models import load_model
-model = load_model(best_model_path)
-
+    """
+    MODEL TRAINING
+    """
+    # Define Callback to save the best model during training
+    mc=ModelCheckpoint(best_model_path, monitor='val_loss', mode='min', save_best_only=True,verbose=1)
+    
+    # Let's train the model
+    model.fit(np.array(x_tr),np.array(y_tr),batch_size=128,epochs=N_EPOCH, validation_data=(np.array(x_val),np.array(y_val)),verbose=1, callbacks=[mc])
 
 
 """
 RANDOM MUSIC GENERATION
 """
-import random
+
 ind = np.random.randint(0,len(x_val)-1)
 
 random_music = x_val[ind]
@@ -270,45 +239,7 @@ print(predictions)
 x_int_to_note = dict((number, note_) for number, note_ in enumerate(unique_x)) 
 predicted_notes = [x_int_to_note[i] for i in predictions]
 
-
-
-# Function to convert back to notes
-def convert_to_midi(prediction_output):
-   
-    offset = 0
-    output_notes = []
-
-    # create note and chord objects based on the values generated by the model
-    for pattern in prediction_output:
-        
-        # pattern is a chord
-        if ('.' in pattern) or pattern.isdigit():
-            notes_in_chord = pattern.split('.')
-            notes = []
-            for current_note in notes_in_chord:
-                
-                cn=int(current_note)
-                new_note = note.Note(cn)
-                new_note.storedInstrument = instrument.Piano()
-                notes.append(new_note)
-                
-            new_chord = chord.Chord(notes)
-            new_chord.offset = offset
-            output_notes.append(new_chord)
-            
-        # pattern is a note
-        else:
-            
-            new_note = note.Note(pattern)
-            new_note.offset = offset
-            new_note.storedInstrument = instrument.Piano()
-            output_notes.append(new_note)
-
-        # increase offset each iteration so that notes do not stack
-        offset += 1
-    midi_stream = stream.Stream(output_notes)
-    midi_stream.write('midi', fp='music.mid')
-
-
-convert_to_midi(predicted_notes)
+output_path = "generated_songs/"
+filename = "my_generated_song"
+convert_to_midi(predicted_notes, output_path, filename)
 
