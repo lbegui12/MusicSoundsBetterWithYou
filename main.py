@@ -37,24 +37,27 @@ from sklearn.model_selection import train_test_split
 
 
 #specify the path
-path='./archive/Alain_Souchon/'
+midi_path='./archive/Alain_Souchon/'
+best_model_path = "models"
+if not os.path.exists(best_model_path):
+    os.makedirs(best_model_path)
+    
+best_model_path = best_model_path + "/best_model.h5"
 
-
-
-N_EPOCH = 20
+N_EPOCH = 2
 
 
 
 
 
 # read all the filenames
-files=[i for i in os.listdir(path) if i.endswith(".mid")]
+files=[i for i in os.listdir(midi_path) if i.endswith(".mid")]
 print("There are {} files".format(len(files)))
 
 #reading each midi file
 notes_array = [] 
 for file in files:
-    note_array = read_midi(path+file)
+    note_array = read_midi(midi_path+file)
     if note_array is not None:
         notes_array.append(note_array)
 
@@ -228,14 +231,14 @@ model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 MODEL TRAINING
 """
 # Define Callback to save the best model during training
-mc=ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min', save_best_only=True,verbose=1)
+mc=ModelCheckpoint(best_model_path, monitor='val_loss', mode='min', save_best_only=True,verbose=1)
 
 # Let's train the model
 history = model.fit(np.array(x_tr),np.array(y_tr),batch_size=128,epochs=N_EPOCH, validation_data=(np.array(x_val),np.array(y_val)),verbose=1, callbacks=[mc])
 
 # Loading the best model
 from keras.models import load_model
-model = load_model('best_model.h5')
+model = load_model(best_model_path)
 
 
 
